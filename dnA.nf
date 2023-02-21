@@ -6,13 +6,13 @@ params.ref = "Influenza"
 params.user = "$USER"
 params.reads = null
 
-include { MAP as MAP1 } from '/home/danmaskell/modules/map'
-include { MAP as MAP2 } from '/home/danmaskell/modules/map'
-include { MAP as MAP3 } from '/home/danmaskell/modules/map'
-include { MAP as MAP4 } from '/home/danmaskell/modules/map'
-include { VCF as VCF1 } from '/home/danmaskell/modules/map'
-include { VCF as VCF2 } from '/home/danmaskell/modules/map'
-include { VCF as VCF3 } from '/home/danmaskell/modules/map'
+include { MAP as MAP1 } from './modules/map'
+include { MAP as MAP2 } from './modules/map'
+include { MAP as MAP3 } from './modules/map'
+include { MAP as MAP4 } from './modules/map'
+include { VCF as VCF1 } from './modules/map'
+include { VCF as VCF2 } from './modules/map'
+include { VCF as VCF3 } from './modules/map'
 
 if( !params.reads || params.reads instanceof Boolean ) error "ERROR: Missing --reads parameter"
 if( !params.submission || params.submission instanceof Boolean ) error "ERROR: Missing --submission parameter"
@@ -97,7 +97,7 @@ process SUBSAMPLE {
 
 process SPADES {
 
-    publishDir "/home/${params.user}/mnt/VI6Storage/Raw_NGS_Data/${params.submission}/${sampleid}", mode: 'copy'
+    publishDir "${params.submission}/${sampleid}", mode: 'copy'
     
     conda "/home/${params.user}/miniconda3/envs/denovoAssembly-v2"
     
@@ -120,7 +120,7 @@ process BLAST {
     
     conda "/home/${params.user}/miniconda3/envs/denovoAssembly-v2"
     
-    publishDir "/home/${params.user}/mnt/VI6Storage/Raw_NGS_Data/${params.submission}/${sampleid}/BLAST_Hits", mode: 'copy'
+    publishDir "${params.submission}/${sampleid}/BLAST_Hits", mode: 'copy'
     
     input:
     tuple val(sampleid), path(contigs)
@@ -169,7 +169,7 @@ process CAT {
 
     conda "/home/${params.user}/miniconda3/envs/denovoAssembly-v2"
     
-    publishDir "/home/${params.user}/mnt/VI6Storage/Raw_NGS_Data/${params.submission}/${sampleid}", mode: 'copy'
+    publishDir "${params.submission}/${sampleid}", mode: 'copy'
     
     errorStrategy 'finish'
     
@@ -194,7 +194,7 @@ process CONSENSUS {
 
     conda "/home/${params.user}/miniconda3/envs/denovoAssembly-v2"
     
-    publishDir "/home/${params.user}/mnt/VI6Storage/Raw_NGS_Data/${params.submission}/${sampleid}", mode: 'copy'
+    publishDir "${params.submission}/${sampleid}", mode: 'copy'
     
     input:
     tuple val(sampleid), path(realign)
