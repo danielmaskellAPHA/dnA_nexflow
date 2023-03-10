@@ -1,7 +1,8 @@
 ======V I 6 - N F - A S S E M B L Y - P I P E L I N E - V 1.0 ======
 	
-	** v1.0 - 08/02/2022 ** -- working build
-	** v1.0.1 - 21/02/2022 ** -- fixed final consensus ordering and output issues
+	** v1.0 - 08/02/2023 ** -- working build
+	** v1.0.1 - 21/02/2023 ** -- fixed final consensus ordering and output issues
+	** v1.1 - 28/02/2023 ** -- fixed iteration inconsistencies (sample mixing) when running multiple reads. added '--help' command. added error messages for execution issues.
 
 Adapted from original denovoAssembly.sh by Dan Maskell VI6 (daniel.maskell@APHA.gov.uk)
 
@@ -31,7 +32,7 @@ Will publish:
 - Final map with stats
 - Final consensus
 
-Poor/non-Influenza reads will halt when attempting to construct a hypothetical reference.
+Poor/non-Influenza reads will halt when attempting to construct a hypothetical reference. This will not interrupt the pipeline. It is recommended to execute the pipeline with '-with-report' for easy identification of failed samples.
 
 Nextflow produces a "work" directory as it runs. This pipeline is written to remove sizeable mapping files from this directory as soon as they are obsolete. 
 This means runs cannot be resumed. 
