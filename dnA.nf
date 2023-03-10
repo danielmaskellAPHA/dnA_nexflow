@@ -1,44 +1,50 @@
 #!usr/bin/env nextflow
 
-params.submission = null
+params.outdir = null
 params.host = "Chicken"
 params.ref = "Influenza"
-params.user = "$USER"
+user = "$USER"
 params.reads = null
 
-include { MAP as MAP1 } from './modules/map'
-include { MAP as MAP2 } from './modules/map'
-include { MAP as MAP3 } from './modules/map'
-include { MAP as MAP4 } from './modules/map'
-include { VCF as VCF1 } from './modules/map'
-include { VCF as VCF2 } from './modules/map'
-include { VCF as VCF3 } from './modules/map'
+include { MAP as MAP1 } from "/home/${user}/mnt/VI6Bioinformatics/Nextflow/denovoAssembly/modules/map/main.nf"
+include { MAP as MAP2 } from "/home/${user}/mnt/VI6Bioinformatics/Nextflow/denovoAssembly/modules/map/main.nf"
+include { MAP as MAP3 } from "/home/${user}/mnt/VI6Bioinformatics/Nextflow/denovoAssembly/modules/map/main.nf"
+include { MAP as MAP4 } from "/home/${user}/mnt/VI6Bioinformatics/Nextflow/denovoAssembly/modules/map/main.nf"
+include { VCF as VCF1 } from "/home/${user}/mnt/VI6Bioinformatics/Nextflow/denovoAssembly/modules/map/main.nf"
+include { VCF as VCF2 } from "/home/${user}/mnt/VI6Bioinformatics/Nextflow/denovoAssembly/modules/map/main.nf"
+include { VCF as VCF3 } from "/home/${user}/mnt/VI6Bioinformatics/Nextflow/denovoAssembly/modules/map/main.nf"
 
-if( !params.reads || params.reads instanceof Boolean ) error "ERROR: Missing --reads parameter"
-if( !params.submission || params.submission instanceof Boolean ) error "ERROR: Missing --submission parameter"
+check_params()
 
-pattern = "${params.reads}*_{S*_R1,S*_R2}*.fastq.gz"
+if( !params.reads || params.reads instanceof Boolean ) error "ERROR: Missing --reads parameter, check --help for usage"
+if( !params.outdir || params.outdir instanceof Boolean ) error "ERROR: Missing --outdir parameter, check --help for usage"
+if( params.host == true ) error "ERROR: Host parameter raised but not specified. Input a host, or omit this for default (Chicken)"
+if( params.ref == true ) error "ERROR: Reference parameter raised but not specified. Input a reference, or omit this for default (Influenza)"
 
-if( params.host == "Chicken" )
-    host = "/home/${params.user}/mnt/VI6Bioinformatics/Central_Pipelines/denovoAssembly/Host_Genomes/GallusGallusGenome/GCA_000002315.5_GRCg6a_genomic.fna.gz"
+pattern = "${params.reads}/*_{S*_R1,S*_R2}*.fastq.gz"
+
+if( params.host == "Chicken" || params.host == "chicken" )
+    host = "/home/${user}/mnt/VI6Bioinformatics/Central_Pipelines/denovoAssembly/Host_Genomes/GallusGallusGenome/GCA_000002315.5_GRCg6a_genomic.fna.gz"
 else
     host = params.host
     
-if( params.ref == "Influenza" )
-    ref = "/home/${params.user}/mnt/VI6Bioinformatics/Central_Pipelines/denovoAssembly/Viral_Reference_Databases/Influenza_Database/"
+if( params.ref == "Influenza" || params.ref == "influenza" || params.ref == "flu" || params.ref == "Flu" )
+    ref = "/home/${user}/mnt/VI6Bioinformatics/Central_Pipelines/denovoAssembly/Viral_Reference_Databases/Influenza_Database/"
 else
     ref = params.ref
+    
+
 
 log.info """\
     V I 6 - N F - P I P E L I N E
     =============================
-    submission: ${params.submission}
+    outdir    : ${params.outdir}
     host      : ${params.host}
     hostdir   : ${host}
     virus     : ${params.ref}
     virusdir  : ${ref}
     reads     : ${params.reads}
-    user      : ${params.user}
+    user      : ${user}
     """
     .stripIndent()
     
@@ -49,19 +55,21 @@ Channel
     
 process HOSTMAP {
 
-    tag "Mapping $sampleid to host"
+    tag "Mapping ${sampleid} to host"
      
-    conda "/home/${params.user}/miniconda3/envs/denovoAssembly-v2"
+    errorStrategy 'ignore'
+    
+    conda "/home/${user}/miniconda3/envs/denovoAssembly-v2"
     
     input:
     tuple val(sampleid), path(reads)
     
     output:
-    tuple val(sampleid), path("${sampleid}_NotHostReads.bam")
+    tuple val(sampleid), path("${sampleid}_NotHostReads.bam"), path(reads)
     
     script:
     """
-    bwa mem -t 4 ${host} ${reads[0]} ${reads[1]} | samtools view -@ 4 -b -f 4 -o "$sampleid"_NotHostReads.bam -;
+    bwa mem -t ${task.cpus} ${host} ${reads[0]} ${reads[1]} | samtools view -@ ${task.cpus} -b -f 4 -o "$sampleid"_NotHostReads.bam -;
     """
 }
     
@@ -69,13 +77,15 @@ process SUBSAMPLE {
 
     tag "Subsampling ${sampleid} non-host reads"
     
-    conda "/home/${params.user}/miniconda3/envs/denovoAssembly-v2"
+    errorStrategy 'ignore'
+    
+    conda "/home/${user}/miniconda3/envs/denovoAssembly-v2"
     
     input:
-    tuple val(sampleid), path(nonhost)
+    tuple val(sampleid), path(nonhost), path(reads)
     
     output:
-    tuple val(sampleid), path("*NotHostReads*")    
+    tuple val(sampleid), path("*NotHostReads*"), path(reads)    
     
     shell:
     '''
@@ -90,26 +100,30 @@ process SUBSAMPLE {
             BAMFile=!{nonhost}
     fi
     
-    samtools sort -@ 4 -n -O BAM $BAMFile | samtools fastq -@ 4 -1 !{sampleid}_NotHostReads1.fastq -2 !{sampleid}_NotHostReads2.fastq -s !{sampleid}_NotHostSingletons.fastq -;
+    samtools sort -@ !{task.cpus} -n -O BAM $BAMFile | samtools fastq -@ !{task.cpus} -1 !{sampleid}_NotHostReads1.fastq -2 !{sampleid}_NotHostReads2.fastq -s !{sampleid}_NotHostSingletons.fastq -;
     rm "$(readlink -f $BAMFile)"
     '''
 }
 
 process SPADES {
 
-    publishDir "${params.submission}/${sampleid}", mode: 'copy'
+    publishDir "${params.outdir}/${sampleid}", mode: 'copy', pattern: 'SPAdes/*.fasta'
     
-    conda "/home/${params.user}/miniconda3/envs/denovoAssembly-v2"
+    tag "Running SPAdes on ${sampleid}"
+    
+    errorStrategy 'ignore'
+    
+    conda "/home/${user}/miniconda3/envs/denovoAssembly-v2"
     
     input:
-    tuple val(sampleid), path(reads)
+    tuple val(sampleid), path(nh_reads), path(reads)
     
     output:
-    tuple val(sampleid), path("SPAdes/*contigs.fasta")
+    tuple val(sampleid), path("SPAdes/*contigs.fasta"), path(reads)
     
     script:
     """
-    spades.py --threads 4 --only-assembler --pe1-1 ${reads[0]} --pe1-2 ${reads[1]} -o SPAdes
+    spades.py --threads ${task.cpus} --only-assembler --pe1-1 ${nh_reads[0]} --pe1-2 ${nh_reads[1]} -o SPAdes
     
     mv SPAdes/contigs.fasta SPAdes/${sampleid}_SPAdes_contigs.fasta
     """
@@ -118,15 +132,17 @@ process SPADES {
 
 process BLAST {
     
-    conda "/home/${params.user}/miniconda3/envs/denovoAssembly-v2"
+    conda "/home/${user}/miniconda3/envs/denovoAssembly-v2"
     
-    publishDir "${params.submission}/${sampleid}/BLAST_Hits", mode: 'copy'
+    errorStrategy 'ignore'
+    
+    publishDir "${params.outdir}/${sampleid}/BLAST_Hits", mode: 'copy', pattern: '*_crunch.txt'
     
     input:
-    tuple val(sampleid), path(contigs)
+    tuple val(sampleid), path(contigs), path(reads)
     
     output:
-    tuple val(sampleid), path("*_crunch.txt")
+    tuple val(sampleid), path("*_crunch.txt"), path(reads)
     
     shell:
     '''
@@ -142,13 +158,15 @@ process BLAST {
 
 process TOPMATCH {
     
-    conda "/home/${params.user}/miniconda3/envs/denovoAssembly-v2"
+    conda "/home/${user}/miniconda3/envs/denovoAssembly-v2"
+    
+    errorStrategy 'ignore'
     
     input:
-    tuple val(sampleid), path(crunches) 
+    tuple val(sampleid), path(crunches), path(reads) 
     
     output:
-    tuple val(sampleid), path("*_match.fas")  
+    tuple val(sampleid), path("*_match.fas"), path(reads)  
     
     shell:
     '''
@@ -167,17 +185,17 @@ process TOPMATCH {
 
 process CAT {
 
-    conda "/home/${params.user}/miniconda3/envs/denovoAssembly-v2"
+    conda "/home/${user}/miniconda3/envs/denovoAssembly-v2"
     
-    publishDir "${params.submission}/${sampleid}", mode: 'copy'
+    publishDir "${params.outdir}/${sampleid}", mode: 'copy', pattern: '*.fa'
     
-    errorStrategy 'finish'
+    errorStrategy 'ignore'
     
     input:
-    tuple val(sampleid), path(matches)
+    tuple val(sampleid), path(matches), path(reads)
     
     output:
-    tuple val(sampleid), path("*.fa")
+    tuple val(sampleid), path("*.fa"), path(reads)
     
     shell:
     '''
@@ -192,13 +210,12 @@ process CAT {
 
 process CONSENSUS {
 
-    conda "/home/${params.user}/miniconda3/envs/denovoAssembly-v2"
+    conda "/home/${user}/miniconda3/envs/denovoAssembly-v2"
     
-    publishDir "${params.submission}/${sampleid}", mode: 'copy'
+    publishDir "${params.outdir}/${sampleid}", mode: 'copy'
     
     input:
-    tuple val(sampleid), path(realign)
-    tuple val(sampleid), path(rfile)
+    tuple val(sampleid), path(realign), path(rfile), path(reads)
     val count
     
     output:
@@ -217,7 +234,6 @@ process CONSENSUS {
 	reffile=${ref%%.*}
 	
     samplename=!{sampleid}
-    threads=$(grep -c ^processor /proc/cpuinfo)
     
     samtools sort -n -@ "$threads" !{realign} -o - | \
     samtools fixmate -r -m 	-@ "$threads" - - | \
@@ -230,7 +246,7 @@ process CONSENSUS {
     
     cd genconsensus_Results
     
-    python /home/!{params.user}/mnt/VI6Bioinformatics/Central_Pipelines/Utils/genconsensus/genconsensus.py  -t "0" -m "1" -n "-" -r ../"$rfile" -b ../"$samplename"_iter!{count}_clean_mapOnly.bam
+    python /home/!{user}/mnt/VI6Bioinformatics/Central_Pipelines/Utils/genconsensus/genconsensus.py  -t "0" -m "1" -n "-" -r ../"$rfile" -b ../"$samplename"_iter!{count}_clean_mapOnly.bam
     mv final_consensus.fasta ../"$samplename"_iter!{count}_consensus.fasta
     
     cd ..		
@@ -240,28 +256,65 @@ process CONSENSUS {
     samtools flagstat "$samplename"_iter!{count}_realign.bam > "$samplename"_iter!{count}_MappingStats.txt
     
     rm "$(readlink -f !{realign})"
+    rm "$(readlink -f !{reads[0]})"
+    rm "$(readlink -f !{reads[1]})"
     '''
     
 }
 
 workflow{
-    read_pairs_ch.view()
-    bam = HOSTMAP(read_pairs_ch)
-    bam.view{ it }
+    HOSTMAP(read_pairs_ch)
+    (bam, reads) = HOSTMAP.out
     ext_reads = SUBSAMPLE(bam)
-    ext_reads.view{ it }
     dn_contigs = SPADES(ext_reads)
     matches = BLAST(dn_contigs)
     top_matches = TOPMATCH(matches)
     dn_ref = CAT(top_matches)
-    map1 = MAP1(dn_ref, read_pairs_ch, 1)
-    con1 = VCF1(map1, dn_ref, 1)
-    map2 = MAP2(con1, read_pairs_ch, 2)
-    con2 = VCF2(map2, con1, 2)
-    map3 = MAP3(con2, read_pairs_ch, 3)
-    con3 = VCF3(map3, con2, 3)
-    map_final = MAP4(con3, read_pairs_ch, 4)
-    con_final = CONSENSUS(map_final, con3, 4)            
+    map1 = MAP1(dn_ref, 1)
+    con1 = VCF1(map1, 1)
+    map2 = MAP2(con1, 2)
+    con2 = VCF2(map2, 2)
+    map3 = MAP3(con2, 3)
+    con3 = VCF3(map3, 3)
+    map_final = MAP4(con3, 4)
+    con_final = CONSENSUS(map_final, 4)            
 }
-
    
+def check_params() {
+
+    if( params.remove('help') ) {
+        println """\
+        	--outdir   : specify output directory
+        	--host     : specify host genome location or preset (default: Chicken, --hosts to view)
+        	--ref      : specify reference genome location or preset (default: Influenza, --refs to view)
+        	--reads    : specify location of reads
+        	"""
+        	.stripIndent()
+        exit 0
+    }
+    
+    if( params.remove('hosts') ) {
+        println """\
+        	     H O S T     L I S T     
+        	=============================
+        	'Chicken'    : Gallus Gallus
+        	
+        	that's it so far, sorry :) - 27/02/23
+        	"""
+        	.stripIndent()
+        exit 0
+    }
+    
+    if( params.remove('refs') ) {
+        println """\
+        	R E F E R E N C E     L I S T
+        	=============================
+        	'Influenza'    : Influenza A
+        	
+        	that's it so far, sorry :) - 27/02/23 DM
+        	"""
+        	.stripIndent()
+        exit 0
+    }
+
+}
