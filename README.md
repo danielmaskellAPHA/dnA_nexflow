@@ -2,7 +2,7 @@
 	
 	** v1.0 - 08/02/2023 ** -- working build
 	** v1.0.1 - 21/02/2023 ** -- fixed final consensus ordering and output issues
-	** v1.1 - 28/02/2023 ** -- fixed iteration inconsistencies (sample mixing) when running multiple reads. added '--help' command. added error messages for execution issues.
+	** v1.1 - 10/03/2023 ** -- fixed iteration inconsistencies (sample mixing) when running multiple reads. added '--help' command. added error messages for execution issues.
 
 Adapted from original denovoAssembly.sh by Dan Maskell VI6 (daniel.maskell@APHA.gov.uk)
 
