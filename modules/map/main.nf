@@ -1,64 +1,59 @@
+user = "$USER"
+
 process MAP {
 
-    conda "/home/${params.user}/miniconda3/envs/denovoAssembly-v2"
+    conda "/home/${user}/miniconda3/envs/denovoAssembly-v2"
+    
+    maxForks 5
     
     input:
-    tuple val(sampleid), path(top_match)
-    tuple val(sampleid_og), path(reads)
+    tuple val(sampleid), path(rfile), path(reads)
     val count
     
     output:
-    tuple val(sampleid), path("*_realign.bam")
+    tuple val(sampleid), path("*_realign.bam"), path(rfile), path(reads)
 
     shell:
+    def avail_mem = task.memory ? ((task.memory.toBytes() - 6000000000) / task.cpus) : false
+    def sort_mem = avail_mem && avail_mem > 2000000000 ? "-m $avail_mem" : ''
     '''
-    rfile=!{top_match}
+    rfile=!{rfile}
 
 	ref=$(basename "$rfile")
 	refname=${ref%%_*}
 	reffile=${ref%%.*}
 	
     samplename=!{sampleid}
-    threads=$(grep -c ^processor /proc/cpuinfo)
     
+    bwa index !{rfile}
     
-    bwa index !{top_match}
+    samtools faidx !{rfile}
     
-    samtools faidx !{top_match}
-    
-    picard -XX:ParallelGCThreads="$threads" CreateSequenceDictionary R="$rfile" O=${rfile%%.*}.dict
+    picard -XX:ParallelGCThreads=!{task.cpus} CreateSequenceDictionary R="$rfile" O=${rfile%%.*}.dict
 
-    bwa mem -T10 -t "$threads" -k 19 -B 4 -O 6 -R "$(echo "@RG\\tID:!{sampleid}\\tSM:!{sampleid}\\tLB:!{sampleid}")" "$rfile" !{reads[0]} !{reads[1]} | samtools view -@ "$threads" -u - | samtools sort -@ "$threads" -o "$samplename"_iter!{count}_map_sorted.bam
+    bwa mem -T10 -t !{task.cpus} -k 19 -B 4 -O 6 -R "$(echo "@RG\\tID:!{sampleid}\\tSM:!{sampleid}\\tLB:!{sampleid}")" "$rfile" !{reads[0]} !{reads[1]} | samtools view -@ !{task.cpus} -u - | samtools sort -@ !{task.cpus} !{sort_mem} -o "$samplename"_iter!{count}_map_sorted.bam
     
-    samtools index -@ "$threads" "$samplename"_iter!{count}_map_sorted.bam
+    samtools index -@ !{task.cpus} "$samplename"_iter!{count}_map_sorted.bam
 
-    python '/home/!{params.user}/mnt/VI6Bioinformatics/Central_Pipelines/denovoAssembly/gatk.py' -T RealignerTargetCreator -nt "$threads" -R "$rfile" -I "$samplename"_iter!{count}_map_sorted.bam -o indel!{count}.list
+    python /home/!{user}/mnt/VI6Bioinformatics/Central_Pipelines/denovoAssembly/gatk.py -T RealignerTargetCreator -nt !{task.cpus} -R "$rfile" -I "$samplename"_iter!{count}_map_sorted.bam -o indel!{count}.list
     
-    python '/home/!{params.user}/mnt/VI6Bioinformatics/Central_Pipelines/denovoAssembly/gatk.py' -T IndelRealigner -R "$rfile" -I "$samplename"_iter!{count}_map_sorted.bam -targetIntervals indel!{count}.list -maxReads 50000 -o "$samplename"_iter!{count}_realign.bam
+    python /home/!{user}/mnt/VI6Bioinformatics/Central_Pipelines/denovoAssembly/gatk.py -T IndelRealigner -R "$rfile" -I "$samplename"_iter!{count}_map_sorted.bam -targetIntervals indel!{count}.list -maxReads 50000 -o "$samplename"_iter!{count}_realign.bam
 		
     rm "$samplename"_iter!{count}_map_sorted.bam
     rm "$samplename"_iter!{count}_map_sorted.bam.bai
-    
-    if [ !{count} == 4 ]
-    then
-    	rm "$(readlink -f !{reads[0]})"
-    	rm "$(readlink -f !{reads[1]})"
-   	fi
-    
     '''
     
 }
 
 process VCF {
-    conda "/home/${params.user}/miniconda3/envs/denovoAssembly-v2"
+    conda "/home/${user}/miniconda3/envs/denovoAssembly-v2"
     
     input:
-    tuple val(sampleid), path(realign)
-    tuple val(sampleid), path(rfile)
+    tuple val(sampleid), path(realign), path(rfile), path(reads)
     val count
     
     output:
-    tuple val(sampleid), path("*.fasta")
+    tuple val(sampleid), path("*.fasta"), path(reads)
     
     shell:
     '''
@@ -69,10 +64,9 @@ process VCF {
 	reffile=${ref%%.*}
 	
     samplename=!{sampleid}
-    threads=$(grep -c ^processor /proc/cpuinfo)
     
-    bcftools mpileup -L 10000 -Q1 -AEpf "$rfile" !{realign} | bcftools call --threads "$threads" -c - > "$samplename"_iter!{count}.vcf
-    perl /home/!{params.user}/mnt/VI6Bioinformatics/Central_Pipelines/Utils/vcf2consensus.pl  consensus -f "$rfile" "$samplename"_iter!{count}.vcf | sed '/^>/ s/-iter[0-9]//;/^>/ s/$/'-iter!{count}'/' - > "$samplename"_iter!{count}_consensus.fasta
+    bcftools mpileup -L 10000 -Q1 -AEpf "$rfile" !{realign} | bcftools call --threads !{task.cpus} -c - > "$samplename"_iter!{count}.vcf
+    perl /home/!{user}/mnt/VI6Bioinformatics/Central_Pipelines/Utils/vcf2consensus.pl  consensus -f "$rfile" "$samplename"_iter!{count}.vcf | sed '/^>/ s/-iter[0-9]//;/^>/ s/$/'-iter!{count}'/' - > "$samplename"_iter!{count}_consensus.fasta
 
     samtools flagstat !{realign} > "$samplename"_iter!{count}_MappingStats.txt
     
